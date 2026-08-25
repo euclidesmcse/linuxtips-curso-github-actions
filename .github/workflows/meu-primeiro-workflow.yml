@@ -13,4 +13,4 @@ jobs:
               run: cat /etc/os-release
 
             - name: Exibir uma mensagem
-              run: "Estou fazendo o curso de github actions da Linuxtips"
+              run: echo "Estou fazendo o curso de github actions da Linuxtips"
