@@ -7,7 +7,7 @@ on:
 
 jobs:
     giropops:
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-26.04
         steps:
             - name: Confere versao ubuntu
               run: cat /etc/os-release
