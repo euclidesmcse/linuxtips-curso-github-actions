@@ -19,5 +19,4 @@ jobs:
                run: la -lha
 
             -  name: Ler conteudo do arquivo
-               run: cat mensagem.txt
-               
+               run: cat mensagem.txt                                                                                                                                                       
