@@ -13,14 +13,24 @@ jobs:
           run: cat /etc/os-release
 
         - name: Exibir uma mensagem
-          run: echo "Estou fazendo o curso de github actions da Linuxtips" > mensagem.txt                                                                                                                                                   
+          run: echo "Estou fazendo o curso de github actions da Linuxtips" > mensagem.txt 
+          
+          - name: Upload do artefato
+          uses: actions/upload-artifact@v4
+          with:
+          name: Strigus
+          path: mensagem.txt 
+
   jobs02:
+      needs: jobs01
       runs-on: ubuntu-26.04
+
       steps:
         - name: Ver conteudo do diretorio
           run: ls -lha
 
-        - uses: actions/download-artifact@v4
+        - name: Download de artefado
+          - uses: actions/download-artifact@v4
           with:
             name: Strigus
             path: mensagem.txt
