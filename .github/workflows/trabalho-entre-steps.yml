@@ -1,7 +1,7 @@
 name: Vendeo arquivos compartilhado entre steps
 
 on:
-  push
+  push:
     branches:
       - main
 
