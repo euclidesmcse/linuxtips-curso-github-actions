@@ -15,9 +15,9 @@ jobs:
         - name: Exibir uma mensagem
           run: echo "Estou fazendo o curso de github actions da Linuxtips" > mensagem.txt 
           
-          - name: Upload do artefato
-          uses: actions/upload-artifact@v4
-          with:
+        - name: Upload do artefato
+        uses: actions/upload-artifact@v4
+        with:
           name: Strigus
           path: mensagem.txt 
 
