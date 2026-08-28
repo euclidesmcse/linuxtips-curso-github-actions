@@ -16,7 +16,7 @@ jobs:
               run: echo "Estou fazendo o curso de github actions da Linuxtips" > mensagem.txt
 
             -  name: Qualquer outra coisa
-               run: la -lha
+               run: ls -lha
 
             -  name: Ler conteudo do arquivo
                run: cat mensagem.txt                                                                                                                                                       
