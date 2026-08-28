@@ -1,9 +1,9 @@
 name: Vendeo arquivos compartilhado entre steps
 
 on:
-    push:
-        branches:
-            - main
+  push
+    branches:
+      - main
 
 jobs:
     entre-steps:
