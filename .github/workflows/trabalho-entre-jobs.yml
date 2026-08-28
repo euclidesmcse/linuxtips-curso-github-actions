@@ -17,8 +17,22 @@ jobs:
   jobs02:
       runs-on: ubuntu-26.04
       steps:
-        - name: Acessa arquivo mensagem
+        - name: Ver conteudo do diretorio
           run: ls -lha
 
+        - uses: actions/download-artifact@v4
+          with:
+            name: Strigus
+            path: mensagem.txt
+
+        - name: Ver o conteudo do diretorio
+          run: ls -lha  && ls ./strigus/
+        
+        - name: Acessa arquivo mensagem
+          run: mv strigus/mensagem.txt . && rm -rf ./strigus
+
+        - name: Ver conteudo do diretorio
+          run: ls -lha
+        
         - name: Acessa arquivo mensagem
           run: cat mensagem.txt
