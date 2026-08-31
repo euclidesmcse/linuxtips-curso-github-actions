@@ -39,8 +39,8 @@
 #      https://app.docker.com/settings/personal-access-tokens
 #   2) No repositório, vá em Settings > Secrets and variables > Actions e
 #      cadastre dois secrets:
-#        - DOCKERHUB_USERNAME  (seu usuário do Docker Hub)
-#        - DOCKERHUB_TOKEN     (o token gerado no passo 1)
+#        - DOCKERHUB_USER  (seu usuário do Docker Hub)
+#        - DOCKERHUB_PAT   (o token gerado no passo 1)
 #
 # Se os secrets NÃO estiverem cadastrados, os steps do Scout são pulados
 # automaticamente (veja o `if:` deles) e o workflow continua verde, cumprindo
@@ -122,11 +122,11 @@ jobs:
     #
     # Detalhe importante: o contexto `secrets` NÃO está disponível em um `if:`
     # de step. Por isso copiamos o secret para uma variável de ambiente aqui, o
-    # que nos permite escrever `if: env.DOCKERHUB_USERNAME != ''` mais abaixo e
+    # que nos permite escrever `if: env.DOCKERHUB_USER != ''` mais abaixo e
     # pular o Docker Scout quando não há credenciais cadastradas.
     env:
       IMAGE: ${{ inputs.image }}
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
 
     steps:
       # -------------------------------------------------------------------------
@@ -181,16 +181,16 @@ jobs:
       #
       # O `if:` abaixo pula este step (e o próximo) quando o secret não existe,
       # evitando que o workflow quebre para quem ainda não configurou as
-      # credenciais. Note que testamos `env.DOCKERHUB_USERNAME`, e não
-      # `secrets.DOCKERHUB_USERNAME`: o contexto `secrets` não está disponível
+      # credenciais. Note que testamos `env.DOCKERHUB_USER`, e não
+      # `secrets.DOCKERHUB_USER`: o contexto `secrets` não está disponível
       # em `if:` de step, daí o mapeamento feito no `env:` do job.
       # -------------------------------------------------------------------------
       - name: Login no Docker Hub (necessário para o Docker Scout)
-        if: env.DOCKERHUB_USERNAME != ''
+        if: env.DOCKERHUB_USER != ''
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_PAT }}
 
       # -------------------------------------------------------------------------
       # STEP 4 - DESAFIO ADICIONAL: Análise de vulnerabilidades (Docker Scout)
@@ -210,7 +210,7 @@ jobs:
       # Referência: https://github.com/docker/scout-action
       # -------------------------------------------------------------------------
       - name: Análise de vulnerabilidades com Docker Scout
-        if: env.DOCKERHUB_USERNAME != ''
+        if: env.DOCKERHUB_USER != ''
         uses: docker/scout-action@v1
         with:
           command: cves
