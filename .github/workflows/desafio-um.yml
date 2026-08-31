@@ -138,7 +138,7 @@ jobs:
       # recomendado e útil em pipelines reais.
       # -------------------------------------------------------------------------
       - name: Checkout do repositório
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # -------------------------------------------------------------------------
       # STEP 1 - Download da imagem Docker (docker pull)
