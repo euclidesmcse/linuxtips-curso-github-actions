@@ -13,10 +13,11 @@
 #      execução. Isso permite reaproveitar o mesmo workflow para testar
 #      diferentes imagens Docker, sem precisar editar este arquivo .yml.
 #
-#   3) Como executar comandos Docker dentro de um runner do GitHub Actions,
-#      usando a Action oficial `docker/setup-buildx-action` para preparar o
-#      ambiente e a Action `docker/scout-action` (Docker Scout CLI) para
-#      análise de vulnerabilidades (desafio adicional).
+#   3) Como executar comandos Docker dentro de um runner do GitHub Actions.
+#      O runner ubuntu-latest já vem com o Docker instalado e com o daemon em
+#      execução, então `docker pull` e `docker images` funcionam direto, sem
+#      nenhum passo de instalação. Para o desafio adicional usamos a Action
+#      oficial `docker/scout-action` (Docker Scout) para análise de CVEs.
 #
 # -----------------------------------------------------------------------------
 # COMO EXECUTAR ESTE WORKFLOW
@@ -27,6 +28,23 @@
 #   4) No campo "Imagem Docker", informe a imagem no formato `imagem:tag`
 #      (ex.: alpine:latest, nginx:1.27, node:20-alpine).
 #   5) Clique em "Run workflow" e acompanhe os logs em tempo real.
+#
+# -----------------------------------------------------------------------------
+# PRÉ-REQUISITO DO DESAFIO ADICIONAL (Docker Scout)
+# -----------------------------------------------------------------------------
+# O Docker Scout EXIGE autenticação no Docker Hub. Sem credenciais, o step de
+# análise falha com erro de autenticação. Para usar essa parte:
+#
+#   1) Crie um Access Token em:
+#      https://app.docker.com/settings/personal-access-tokens
+#   2) No repositório, vá em Settings > Secrets and variables > Actions e
+#      cadastre dois secrets:
+#        - DOCKERHUB_USER  (seu usuário do Docker Hub)
+#        - DOCKERHUB_PAT   (o token gerado no passo 1)
+#
+# Se os secrets NÃO estiverem cadastrados, os steps do Scout são pulados
+# automaticamente (veja o `if:` deles) e o workflow continua verde, cumprindo
+# o desafio principal normalmente.
 #
 # -----------------------------------------------------------------------------
 # DOCUMENTAÇÃO DIDÁTICA PARA ESTAGIÁRIOS
@@ -45,6 +63,10 @@
 #   • `inputs.image` será referenciado nos steps como `${{ inputs.image }}`.
 #     Esse é o jeito de "passar o valor informado pelo usuário para os comandos".
 #
+#   • `permissions:` define o que o GITHUB_TOKEN pode fazer neste workflow.
+#     Declarar explicitamente o mínimo necessário (aqui, apenas leitura do
+#     código) é a prática de "menor privilégio" recomendada pelo GitHub.
+#
 #   • `jobs.<nome>.runs-on:` indica em qual máquina virtual o job será
 #     executado. Usamos `ubuntu-latest` (mais estável e amplamente suportado).
 #
@@ -54,7 +76,7 @@
 #
 #   • Variáveis de ambiente (`env:`) no nível do job ficam disponíveis para
 #     todos os steps. Usamos isso para definir IMAGE=${{ inputs.image }}
-#     uma única vez e reutilizar nos três steps.
+#     uma única vez e reutilizar nos steps seguintes.
 # =============================================================================
 
 name: Desafio 01 - Operações com Docker
@@ -75,6 +97,16 @@ on:
         type: string
 
 # -----------------------------------------------------------------------------
+# PERMISSÕES DO GITHUB_TOKEN
+# -----------------------------------------------------------------------------
+# Menor privilégio: este workflow só precisa ler o repositório. Sem esse bloco,
+# o token herdaria as permissões padrão configuradas no repositório, que podem
+# ser bem mais amplas do que o necessário.
+# -----------------------------------------------------------------------------
+permissions:
+  contents: read
+
+# -----------------------------------------------------------------------------
 # JOBS
 # -----------------------------------------------------------------------------
 # Apenas um job é necessário para cumprir o desafio. Poderíamos separar em
@@ -87,8 +119,14 @@ jobs:
     runs-on: ubuntu-latest
 
     # Variáveis reutilizáveis em todos os steps deste job.
+    #
+    # Detalhe importante: o contexto `secrets` NÃO está disponível em um `if:`
+    # de step. Por isso copiamos o secret para uma variável de ambiente aqui, o
+    # que nos permite escrever `if: env.DOCKERHUB_USER != ''` mais abaixo e
+    # pular o Docker Scout quando não há credenciais cadastradas.
     env:
       IMAGE: ${{ inputs.image }}
+      DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
 
     steps:
       # -------------------------------------------------------------------------
@@ -100,7 +138,7 @@ jobs:
       # recomendado e útil em pipelines reais.
       # -------------------------------------------------------------------------
       - name: Checkout do repositório
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # -------------------------------------------------------------------------
       # STEP 1 - Download da imagem Docker (docker pull)
@@ -109,61 +147,91 @@ jobs:
       # pelo usuário. O `$IMAGE` vem da variável de ambiente definida em `env:`,
       # e o valor dela foi capturado de `inputs.image` no disparo manual.
       #
-      # Dica para estagiários: `$IMAGE` e `${{ env.IMAGE }}` são equivalentes.
-      # A primeira é a forma shell; a segunda é a forma de expressão do GitHub.
+      # ATENÇÃO, estagiário: `$IMAGE` e `${{ env.IMAGE }}` NÃO são equivalentes
+      # em segurança. A expressão `${{ ... }}` é substituída pelo GitHub ANTES
+      # de o shell existir, ou seja, o texto digitado pelo usuário vira parte do
+      # script — o que abre espaço para "script injection" (imagine alguém
+      # digitando `alpine; rm -rf /`). Já `$IMAGE` é lido pelo shell como dado,
+      # nunca como código. Por isso, dentro de `run:`, SEMPRE prefira a
+      # variável de ambiente — e entre aspas, para não sofrer word splitting.
       # -------------------------------------------------------------------------
       - name: Download da imagem (docker pull)
-        run: docker pull $IMAGE
+        run: docker pull "$IMAGE"
 
       # -------------------------------------------------------------------------
       # STEP 2 - Listagem das imagens no runner (docker images)
       # -------------------------------------------------------------------------
-      # Após o pull, listamos todas as imagens presentes no runner para que,
-      # pelos logs, seja possível confirmar visualmente que a imagem informada
+      # Após o pull, listamos as imagens presentes no runner para que, pelos
+      # logs, seja possível confirmar visualmente que a imagem informada
       # realmente foi baixada e está disponível localmente.
       #
-      # O filtro `$IMAGE` no final do comando filtra a listagem para mostrar
-      # apenas imagens cujo nome contenha o texto informado, facilitando a
-      # conferência nos logs.
+      # O argumento de `docker images` NÃO é uma busca por texto: ele é um
+      # filtro no formato REPOSITORY[:TAG] (aceita curingas, ex.: `alpine*`).
+      # Passar `$IMAGE` aqui restringe a listagem exatamente à imagem baixada.
       # -------------------------------------------------------------------------
       - name: Listagem das imagens disponíveis (docker images)
-        run: docker images $IMAGE
+        run: docker images "$IMAGE"
 
       # -------------------------------------------------------------------------
-      # STEP 3 - DESAFIO ADICIONAL: Análise de vulnerabilidades (Docker Scout)
+      # STEP 3 - DESAFIO ADICIONAL: Login no Docker Hub
+      # -------------------------------------------------------------------------
+      # O Docker Scout só funciona autenticado no Docker Hub. Fazemos o login
+      # com a Action oficial `docker/login-action`, usando os secrets do
+      # repositório (veja a seção "PRÉ-REQUISITO" no topo do arquivo).
+      #
+      # O `if:` abaixo pula este step (e o próximo) quando o secret não existe,
+      # evitando que o workflow quebre para quem ainda não configurou as
+      # credenciais. Note que testamos `env.DOCKERHUB_USER`, e não
+      # `secrets.DOCKERHUB_USER`: o contexto `secrets` não está disponível
+      # em `if:` de step, daí o mapeamento feito no `env:` do job.
+      # -------------------------------------------------------------------------
+      - name: Login no Docker Hub (necessário para o Docker Scout)
+        if: env.DOCKERHUB_USER != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_PAT }}
+
+      # -------------------------------------------------------------------------
+      # STEP 4 - DESAFIO ADICIONAL: Análise de vulnerabilidades (Docker Scout)
       # -------------------------------------------------------------------------
       # O Docker Scout é a ferramenta oficial do Docker para análise de CVEs
-      # (vulnerabilidades conhecidas) em imagens. Ele consulta uma base de
-      # dados pública e privada e gera um resumo com a quantidade de
-      # vulnerabilidades por severidade (LOW, MEDIUM, HIGH, CRITICAL).
+      # (vulnerabilidades conhecidas) em imagens. Ele consulta bases de dados
+      # públicas e gera um resumo com a quantidade de vulnerabilidades por
+      # severidade (LOW, MEDIUM, HIGH, CRITICAL).
       #
       # Usamos a Action oficial `docker/scout-action`, publicada pela própria
-      # Docker, o que é a forma recomendada e mais segura de integrar o
+      # Docker, que é a forma recomendada e mais segura de integrar o
       # Docker Scout ao GitHub Actions.
       #
       # O parâmetro `image` recebe o valor informado pelo usuário, garantindo
       # que a mesma imagem do `docker pull` seja a imagem analisada.
-      # O parâmetro `severity` é uma boa prática para resumir a saída e
-      # facilitar a leitura pelos logs.
       #
       # Referência: https://github.com/docker/scout-action
       # -------------------------------------------------------------------------
       - name: Análise de vulnerabilidades com Docker Scout
+        if: env.DOCKERHUB_USER != ''
         uses: docker/scout-action@v1
         with:
           command: cves
           image: ${{ env.IMAGE }}
-          severity: low,medium,high,critical
-          # `exit-code` faz o step falhar (status vermelho) caso sejam
-          # encontradas vulnerabilidades de severidade alta/crítica.
-          # Útil quando queremos BLOQUEAR o pipeline em produção.
-          # No contexto didático deste desafio, deixamos em "true" para
-          # demonstrar o comportamento de "quality gate".
-          exit-code: "true"
-          # `only-fixed` filtra apenas vulnerabilidades que já possuem
-          # correção disponível, ajudando a priorizar o trabalho.
-          only-fixed: "false"
-          # `ignore-paths` permite excluir caminhos da análise. Útil quando
-          # queremos ignorar diretórios como docs/, tests/, etc.
-          ignore-paths: |
-            **/*.md
+          # O nome correto do filtro de severidade é `only-severities`
+          # (no plural). Cuidado: o GitHub Actions apenas emite um WARNING
+          # para inputs inexistentes em `with:`, ele não falha — então um
+          # nome errado aqui seria silenciosamente ignorado.
+          #
+          # Filtramos só em critical/high porque este step é um "quality gate"
+          # (veja `exit-code` abaixo). Incluir `low` faria praticamente
+          # qualquer imagem real reprovar o pipeline.
+          only-severities: critical,high
+          # `exit-code: true` faz o step falhar (status vermelho) quando
+          # alguma vulnerabilidade das severidades filtradas é encontrada.
+          # É assim que se BLOQUEIA um pipeline em produção.
+          exit-code: true
+          # `only-fixed: true` mostra apenas vulnerabilidades que já possuem
+          # correção disponível — ajuda a priorizar o que dá para resolver
+          # agora, atualizando a imagem base ou os pacotes.
+          only-fixed: true
+          # `summary: true` imprime um resumo compacto no log, em vez da
+          # lista completa de CVEs. Facilita a leitura no console.
+          summary: true
