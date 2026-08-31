@@ -1,0 +1,169 @@
+# =============================================================================
+# DESAFIO 01 - EXECUTANDO OPERAÇÕES COM DOCKER NO GITHUB ACTIONS
+# =============================================================================
+#
+# Este workflow foi criado para resolver o "Desafio 01" do curso de GitHub
+# Actions da Linuxtips. Ele demonstra, na prática, três conceitos fundamentais:
+#
+#   1) Como disparar um workflow MANUALMENTE (workflow_dispatch), permitindo
+#      que o usuário escolha quando a automação deve rodar, sem depender de
+#      eventos automáticos como push ou pull_request.
+#
+#   2) Como receber ENTRADAS DE DADOS (inputs) do usuário no momento da
+#      execução. Isso permite reaproveitar o mesmo workflow para testar
+#      diferentes imagens Docker, sem precisar editar este arquivo .yml.
+#
+#   3) Como executar comandos Docker dentro de um runner do GitHub Actions,
+#      usando a Action oficial `docker/setup-buildx-action` para preparar o
+#      ambiente e a Action `docker/scout-action` (Docker Scout CLI) para
+#      análise de vulnerabilidades (desafio adicional).
+#
+# -----------------------------------------------------------------------------
+# COMO EXECUTAR ESTE WORKFLOW
+# -----------------------------------------------------------------------------
+#   1) Acesse a aba "Actions" do repositório no GitHub.
+#   2) No menu lateral esquerdo, clique em "Desafio 01 - Operações com Docker".
+#   3) Clique no botão "Run workflow" (Executar workflow).
+#   4) No campo "Imagem Docker", informe a imagem no formato `imagem:tag`
+#      (ex.: alpine:latest, nginx:1.27, node:20-alpine).
+#   5) Clique em "Run workflow" e acompanhe os logs em tempo real.
+#
+# -----------------------------------------------------------------------------
+# DOCUMENTAÇÃO DIDÁTICA PARA ESTAGIÁRIOS
+# -----------------------------------------------------------------------------
+#   • `on:` define os gatilhos do workflow. Aqui usamos apenas `workflow_dispatch`,
+#     que é o gatilho manual. Não há `push:` nem `pull_request:` porque o
+#     requisito do desafio é que o workflow NÃO rode automaticamente.
+#
+#   • `workflow_dispatch.inputs:` permite criar um formulário simples para o
+#     usuário informar valores no momento da execução. Cada input tem:
+#       - description: texto exibido como dica ao usuário
+#       - required:    se o campo é obrigatório (true/false)
+#       - default:     valor padrão caso o usuário deixe em branco
+#       - type:        tipo do input (string, boolean, choice, environment)
+#
+#   • `inputs.image` será referenciado nos steps como `${{ inputs.image }}`.
+#     Esse é o jeito de "passar o valor informado pelo usuário para os comandos".
+#
+#   • `jobs.<nome>.runs-on:` indica em qual máquina virtual o job será
+#     executado. Usamos `ubuntu-latest` (mais estável e amplamente suportado).
+#
+#   • `steps:` é a lista ordenada de tarefas que o runner executará.
+#     Cada step tem um `name` (apenas descritivo, aparece nos logs) e uma
+#     ação (`uses:` para Actions prontas ou `run:` para comandos shell).
+#
+#   • Variáveis de ambiente (`env:`) no nível do job ficam disponíveis para
+#     todos os steps. Usamos isso para definir IMAGE=${{ inputs.image }}
+#     uma única vez e reutilizar nos três steps.
+# =============================================================================
+
+name: Desafio 01 - Operações com Docker
+
+# -----------------------------------------------------------------------------
+# GATILHOS (on)
+# -----------------------------------------------------------------------------
+# Só aceitamos disparo MANUAL. Não usamos push, pull_request nem schedule.
+# Isso garante que o workflow só rode quando alguém clicar em "Run workflow".
+# -----------------------------------------------------------------------------
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: "Imagem Docker a ser baixada (formato imagem:tag, ex: alpine:latest)"
+        required: true
+        default: "alpine:latest"
+        type: string
+
+# -----------------------------------------------------------------------------
+# JOBS
+# -----------------------------------------------------------------------------
+# Apenas um job é necessário para cumprir o desafio. Poderíamos separar em
+# múltiplos jobs, mas como todos os passos dependem da mesma máquina (o
+# mesmo contexto Docker), manter tudo em um único job é mais simples e didático.
+# -----------------------------------------------------------------------------
+jobs:
+  docker-operations:
+    name: Operações com Docker
+    runs-on: ubuntu-latest
+
+    # Variáveis reutilizáveis em todos os steps deste job.
+    env:
+      IMAGE: ${{ inputs.image }}
+
+    steps:
+      # -------------------------------------------------------------------------
+      # STEP 0 - Checkout do repositório
+      # -------------------------------------------------------------------------
+      # Boa prática: sempre faça checkout do código no início do job.
+      # actions/checkout baixa o conteúdo do repositório para o workspace do
+      # runner. Mesmo que este workflow não use o código em si, é um padrão
+      # recomendado e útil em pipelines reais.
+      # -------------------------------------------------------------------------
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      # -------------------------------------------------------------------------
+      # STEP 1 - Download da imagem Docker (docker pull)
+      # -------------------------------------------------------------------------
+      # Aqui executamos o comando `docker pull` passando a imagem informada
+      # pelo usuário. O `$IMAGE` vem da variável de ambiente definida em `env:`,
+      # e o valor dela foi capturado de `inputs.image` no disparo manual.
+      #
+      # Dica para estagiários: `$IMAGE` e `${{ env.IMAGE }}` são equivalentes.
+      # A primeira é a forma shell; a segunda é a forma de expressão do GitHub.
+      # -------------------------------------------------------------------------
+      - name: Download da imagem (docker pull)
+        run: docker pull $IMAGE
+
+      # -------------------------------------------------------------------------
+      # STEP 2 - Listagem das imagens no runner (docker images)
+      # -------------------------------------------------------------------------
+      # Após o pull, listamos todas as imagens presentes no runner para que,
+      # pelos logs, seja possível confirmar visualmente que a imagem informada
+      # realmente foi baixada e está disponível localmente.
+      #
+      # O filtro `$IMAGE` no final do comando filtra a listagem para mostrar
+      # apenas imagens cujo nome contenha o texto informado, facilitando a
+      # conferência nos logs.
+      # -------------------------------------------------------------------------
+      - name: Listagem das imagens disponíveis (docker images)
+        run: docker images $IMAGE
+
+      # -------------------------------------------------------------------------
+      # STEP 3 - DESAFIO ADICIONAL: Análise de vulnerabilidades (Docker Scout)
+      # -------------------------------------------------------------------------
+      # O Docker Scout é a ferramenta oficial do Docker para análise de CVEs
+      # (vulnerabilidades conhecidas) em imagens. Ele consulta uma base de
+      # dados pública e privada e gera um resumo com a quantidade de
+      # vulnerabilidades por severidade (LOW, MEDIUM, HIGH, CRITICAL).
+      #
+      # Usamos a Action oficial `docker/scout-action`, publicada pela própria
+      # Docker, o que é a forma recomendada e mais segura de integrar o
+      # Docker Scout ao GitHub Actions.
+      #
+      # O parâmetro `image` recebe o valor informado pelo usuário, garantindo
+      # que a mesma imagem do `docker pull` seja a imagem analisada.
+      # O parâmetro `severity` é uma boa prática para resumir a saída e
+      # facilitar a leitura pelos logs.
+      #
+      # Referência: https://github.com/docker/scout-action
+      # -------------------------------------------------------------------------
+      - name: Análise de vulnerabilidades com Docker Scout
+        uses: docker/scout-action@v1
+        with:
+          command: cves
+          image: ${{ env.IMAGE }}
+          severity: low,medium,high,critical
+          # `exit-code` faz o step falhar (status vermelho) caso sejam
+          # encontradas vulnerabilidades de severidade alta/crítica.
+          # Útil quando queremos BLOQUEAR o pipeline em produção.
+          # No contexto didático deste desafio, deixamos em "true" para
+          # demonstrar o comportamento de "quality gate".
+          exit-code: "true"
+          # `only-fixed` filtra apenas vulnerabilidades que já possuem
+          # correção disponível, ajudando a priorizar o trabalho.
+          only-fixed: "false"
+          # `ignore-paths` permite excluir caminhos da análise. Útil quando
+          # queremos ignorar diretórios como docs/, tests/, etc.
+          ignore-paths: |
+            **/*.md
