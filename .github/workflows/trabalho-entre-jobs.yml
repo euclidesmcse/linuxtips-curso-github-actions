@@ -23,6 +23,7 @@ jobs:
 
   jobs_2:
     runs-on: ubuntu-latest
+    needs: jobs_1
 
     steps:
       - name: Acessa arquivos mensagem
