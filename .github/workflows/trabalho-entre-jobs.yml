@@ -16,10 +16,10 @@ jobs:
           run: echo "Estou fazendo curso na Linux" > mensagem.txt
 
 jobs_2:
-  runs-on: ubuntu-latest
-  steps:
-    - name: Acessa arquivos mensagem
-    run: ls -lha
+      runs-on: ubuntu-latest
+      steps:
+        - name: Acessa arquivos mensagem
+        run: ls -lha
 
-    - name: Acessa arquivos mensagem.
-    run: cat mensagem.txt
+        - name: Acessa arquivos mensagem.
+        run: cat mensagem.txt
